@@ -33,7 +33,7 @@
         this.element = $(element);
         this.startDate = moment().startOf('day');
         this.endDate = moment().endOf('day');
-        this.minDate = false;
+        this.minDate = moment().startOf('day');
         this.maxDate = false;
         this.dateLimit = false;
         this.autoApply = false;
@@ -44,12 +44,13 @@
         this.showCustomRangeLabel = true;
         this.timePicker = false;
         this.timePicker24Hour = false;
-        this.timePickerIncrement = 1;
+        this.timePickerIncrement = 15;
         this.timePickerSeconds = false;
         this.linkedCalendars = true;
         this.autoUpdateInput = true;
         this.alwaysShowCalendars = false;
         this.ranges = {};
+        this.eventDates = [];
 
         this.opens = 'right';
         if (this.element.hasClass('pull-right'))
@@ -93,7 +94,7 @@
 
         //html template for the picker UI
         if (typeof options.template !== 'string' && !(options.template instanceof $))
-            options.template = '<div class="daterangepicker dropdown-menu">' +
+            options.template = '<div class="daterangepicker dropdown-menu" data-action="range-stop">' +
                 '<div class="calendar left">' +
                     '<div class="daterangepicker_input">' +
                       '<input class="input-mini form-control" type="text" name="daterangepicker_start" value="" />' +
@@ -514,6 +515,9 @@
             if (!this.isShowing)
                 this.updateElement();
 
+            // add it to events date
+            this.addEventDate(this.endDate, false);
+
             this.updateMonthsInView();
         },
 
@@ -620,6 +624,20 @@
         },
 
         renderCalendar: function(side) {
+
+            /*eventDates = [];
+            // remove dates from eventDates which aren't in the range
+            this.eventDates.forEach(function(item, index) {
+                var tempDate = moment(item);
+                if(tempDate >= this.startDate && tempDate <= this.endDate)
+                    eventDates.push(item);
+            });
+
+            this.eventDates = [];
+            this.eventDates = eventDates;*/
+
+            // add it to events date
+            this.addEventDate(this.startDate, false);
 
             //
             // Build the matrix of dates that will populate the calendar
@@ -821,6 +839,13 @@
                     //highlight dates in-between the selected dates
                     if (this.endDate != null && calendar[row][col] > this.startDate && calendar[row][col] < this.endDate)
                         classes.push('in-range');
+
+                    //highlight dates which are for events
+                    //console.log("highlight: " + calendar[row][col]._d.toString());
+                    if(this.eventDates.indexOf(calendar[row][col]._d.toString()) !== -1)
+                        classes.push('event-date');
+
+                    //console.log(calendar[row][col].format('YYYY-MM-DD'));
 
                     //apply custom classes for this date
                     var isCustom = this.isCustomDate(calendar[row][col]);
@@ -1288,10 +1313,42 @@
             }
 
         },
+        addEventDate: function(eventDate, remove=true) {
+            if(remove) {
+                if(this.eventDates.indexOf(eventDate._d.toString()) == -1)
+                    this.eventDates.push(eventDate._d.toString());
+                else
+                    this.eventDates.splice(this.eventDates.indexOf(eventDate._d.toString()), 1);
+            }
+            else 
+                if(this.eventDates.indexOf(eventDate._d.toString()) == -1)
+                    this.eventDates.push(eventDate._d.toString());
+        },
 
         clickDate: function(e) {
 
             if (!$(e.target).hasClass('available')) return;
+
+            /* adding event clickable day select. Checks if there is a range in calender. */
+            /*console.log("$(e.target.hasClass('active')) " + $(e.target).hasClass('active'));
+            console.log("!$(e.target.hasClass('today'))" + !$(e.target).hasClass('today'));
+            console.log("$(e.target.hasClass('in-range')) " + $(e.target).hasClass('in-range'));*/
+
+            // next state
+            /*switch() {
+                case 'no-range':
+                    this.state = 'start-range';
+                    this.isRange = true;
+                break;
+                case 'start-range':
+                    this.state = 'stop-range';
+                break;
+                case 'stop-range':
+                break;
+            }
+            if(this.state == 'no-range') {
+                
+            }*/
 
             var title = $(e.target).attr('data-title');
             var row = title.substr(1, 1);
@@ -1299,67 +1356,89 @@
             var cal = $(e.target).parents('.calendar');
             var date = cal.hasClass('left') ? this.leftCalendar.calendar[row][col] : this.rightCalendar.calendar[row][col];
 
-            //
-            // this function needs to do a few things:
-            // * alternate between selecting a start and end date for the range,
-            // * if the time picker is enabled, apply the hour/minute/second from the select boxes to the clicked date
-            // * if autoapply is enabled, and an end date was chosen, apply the selection
-            // * if single date picker mode, and time picker isn't enabled, apply the selection immediately
-            // * if one of the inputs above the calendars was focused, cancel that manual input
-            //
+            if(this.startDate && this.endDate && ($(e.target).hasClass('in-range') || $(e.target).hasClass('today') || $(e.target).hasClass('active'))) {
+                //console.log('click inside range');
+                //console.log(this.eventDates.indexOf(date._d.toString()));
+                
 
-            if (this.endDate || date.isBefore(this.startDate, 'day')) { //picking start
-                if (this.timePicker) {
-                    var hour = parseInt(this.container.find('.left .hourselect').val(), 10);
-                    if (!this.timePicker24Hour) {
-                        var ampm = this.container.find('.left .ampmselect').val();
-                        if (ampm === 'PM' && hour < 12)
-                            hour += 12;
-                        if (ampm === 'AM' && hour === 12)
-                            hour = 0;
+                
+                // add
+                this.addEventDate(date);
+            }
+            else {               
+
+                //
+                // this function needs to do a few things:
+                // * alternate between selecting a start and end date for the range,
+                // * if the time picker is enabled, apply the hour/minute/second from the select boxes to the clicked date
+                // * if autoapply is enabled, and an end date was chosen, apply the selection
+                // * if single date picker mode, and time picker isn't enabled, apply the selection immediately
+                // * if one of the inputs above the calendars was focused, cancel that manual input
+                //
+
+                this.eventDates = [];
+
+                if (this.endDate || date.isBefore(this.startDate, 'day')) { //picking start
+                    if (this.timePicker) {
+                        var hour = parseInt(this.container.find('.left .hourselect').val(), 10);
+                        if (!this.timePicker24Hour) {
+                            var ampm = this.container.find('.left .ampmselect').val();
+                            if (ampm === 'PM' && hour < 12)
+                                hour += 12;
+                            if (ampm === 'AM' && hour === 12)
+                                hour = 0;
+                        }
+                        var minute = parseInt(this.container.find('.left .minuteselect').val(), 10);
+                        var second = this.timePickerSeconds ? parseInt(this.container.find('.left .secondselect').val(), 10) : 0;
+                        date = date.clone().hour(hour).minute(minute).second(second);
                     }
-                    var minute = parseInt(this.container.find('.left .minuteselect').val(), 10);
-                    var second = this.timePickerSeconds ? parseInt(this.container.find('.left .secondselect').val(), 10) : 0;
-                    date = date.clone().hour(hour).minute(minute).second(second);
-                }
-                this.endDate = null;
-                this.setStartDate(date.clone());
-            } else if (!this.endDate && date.isBefore(this.startDate)) {
-                //special case: clicking the same date for start/end,
-                //but the time of the end date is before the start date
-                this.setEndDate(this.startDate.clone());
-            } else { // picking end
-                if (this.timePicker) {
-                    var hour = parseInt(this.container.find('.right .hourselect').val(), 10);
-                    if (!this.timePicker24Hour) {
-                        var ampm = this.container.find('.right .ampmselect').val();
-                        if (ampm === 'PM' && hour < 12)
-                            hour += 12;
-                        if (ampm === 'AM' && hour === 12)
-                            hour = 0;
+                    this.endDate = null;
+                    var startDate = date.clone();
+                    console.log(startDate);
+                    this.setStartDate(date.clone());
+                } else if (!this.endDate && date.isBefore(this.startDate)) {
+                    //special case: clicking the same date for start/end,
+                    //but the time of the end date is before the start date
+                    this.setEndDate(this.startDate.clone());
+                } else { // picking end
+                    if (this.timePicker) {
+                        var hour = parseInt(this.container.find('.right .hourselect').val(), 10);
+                        if (!this.timePicker24Hour) {
+                            var ampm = this.container.find('.right .ampmselect').val();
+                            if (ampm === 'PM' && hour < 12)
+                                hour += 12;
+                            if (ampm === 'AM' && hour === 12)
+                                hour = 0;
+                        }
+                        var minute = parseInt(this.container.find('.right .minuteselect').val(), 10);
+                        var second = this.timePickerSeconds ? parseInt(this.container.find('.right .secondselect').val(), 10) : 0;
+                        date = date.clone().hour(hour).minute(minute).second(second);
                     }
-                    var minute = parseInt(this.container.find('.right .minuteselect').val(), 10);
-                    var second = this.timePickerSeconds ? parseInt(this.container.find('.right .secondselect').val(), 10) : 0;
-                    date = date.clone().hour(hour).minute(minute).second(second);
+                    this.setEndDate(date.clone());
+                    if (this.autoApply) {
+                      this.calculateChosenLabel();
+                      this.clickApply();
+                    }
                 }
-                this.setEndDate(date.clone());
-                if (this.autoApply) {
-                  this.calculateChosenLabel();
-                  this.clickApply();
+
+                if (this.singleDatePicker) {
+                    this.setEndDate(this.startDate);
+                    if (!this.timePicker)
+                        this.clickApply();
                 }
             }
 
-            if (this.singleDatePicker) {
-                this.setEndDate(this.startDate);
-                if (!this.timePicker)
-                    this.clickApply();
-            }
 
             this.updateView();
 
             //This is to cancel the blur event handler if the mouse was in one of the inputs
             e.stopPropagation();
 
+        },
+
+        doubleClickDate: function (e) {
+            console.log('double click');
+            e.stopPropagation();
         },
 
         calculateChosenLabel: function() {
